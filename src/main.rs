@@ -1,16 +1,45 @@
+use std::time::SystemTime;
 
 
-fn read_callback(stream: &mut soundio::InStreamReader) {
-    let frame_count_max = stream.frame_count_max();
-    if let Err(e) = stream.begin_read(frame_count_max) {
-        println!("Error reading from stream: {}", e);
-        return;
+struct HitDetector {
+    in_hit: bool,
+    max_val: i16,
+    hit_started: Option<SystemTime>
+}
+
+trait AudioStreamListener {
+    fn listen(&mut self, stream: &mut soundio::InStreamReader);
+}
+
+impl HitDetector {
+    pub fn new() -> HitDetector {
+        HitDetector {
+            in_hit: false,
+            max_val: 0,
+            hit_started: None
+        }
     }
-    println!("{} frames out of {}", stream.frame_count(), frame_count_max);
-    
-    //for f in 0..stream.frame_count() {
-    //    do_something_with(stream.sample::<i16>(c, f));
-    //}
+}
+
+impl AudioStreamListener for HitDetector {
+    fn listen(&mut self, stream: &mut soundio::InStreamReader) {
+        let frame_count_max = stream.frame_count_max();
+        if let Err(e) = stream.begin_read(frame_count_max) {
+            println!("Error reading from stream: {}", e);
+            return;
+        }
+
+        for f in 0..stream.frame_count() {
+            let s = stream.sample::<i16>(0, f);
+            if s > self.max_val {
+                self.max_val = s
+            } else if self.max_val > 256 {
+                self.in_hit = true;
+                self.hit_started = Some(SystemTime::now());
+                println!("in hit from {} after max val {}", s, self.max_val);
+            }
+        }
+    }
 }
 
 
@@ -28,18 +57,22 @@ fn main() {
     let devs = ctx.input_devices().expect("Error getting devices");
     let dev = &devs[0];
     println!("Device {} ", dev.name());
+    println!("Device is raw: {}", dev.is_raw());
+
+    let mut hit_detector = HitDetector::new();
+    let read_callback = |stream: &mut soundio::InStreamReader| hit_detector.listen(stream);
 
     let mut input_stream = dev.open_instream(
         44100,
         soundio::Format::S16LE,
-        soundio::ChannelLayout::get_builtin(soundio::ChannelLayoutId::Stereo),
+        soundio::ChannelLayout::get_builtin(soundio::ChannelLayoutId::Mono),
         0.02,
         read_callback,
         None::<fn()>,
         None::<fn(soundio::Error)>,
     ).expect("Could not open input stream");
     input_stream.start().expect("could not start stream"); 
-    println!("stream started");
+    println!("{} started", input_stream.name());
 
     let g = getch::Getch::new();
     loop {
