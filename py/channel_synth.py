@@ -7,6 +7,11 @@ import time
 import sys
 import threading
 import readchar
+import sounddevice as sd
+
+import queue
+
+
 
 
 class Player:
@@ -17,6 +22,24 @@ class Player:
 
     def play(self):
         self.channel.play(self.sound)
+
+
+class SynthPlayer:
+    def __init__(self, vol):
+        sd.default.samplerate = 44100
+        sd.default.channels = 2
+        self.q = queue.Queue()
+
+    def _callback(outdata, frames, time, status):
+        outdata[:] = self.q.get()
+    
+    def play():
+        blocksize = 4410
+        self.q.put(self.mix.read(blocksize))
+        with sd.OutputStream(blocksize=blocksize, dtype="float32", callback=callback)
+            while mix.hasData():
+                self.put(mix.read(blocksize))
+    
 
 
 class Controller(BaseHTTPRequestHandler):
